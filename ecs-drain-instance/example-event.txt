@@ -1,0 +1,22 @@
+var event = {
+    "Records": [
+        {
+            "EventSource": "aws:sns",
+            "EventVersion": "1.0",
+            "EventSubscriptionArn": "arn:aws:sns:us-east-2:458712717391:Temp-EcsCluster-ScalingEvents-YUNFZ149C9FU:c6c24496-d81f-47ff-ae6c-167b909e460f",
+            "Sns": {
+                "Type": "Notification",
+                "MessageId": "6bc6c5e9-052b-5e5a-a2e3-97e0f69373cc",
+                "TopicArn": "arn:aws:sns:us-east-2:458712717391:Temp-EcsCluster-ScalingEvents-YUNFZ149C9FU",
+                "Subject": "Auto Scaling:  Lifecycle action 'TERMINATING' for instance i-01dd2b6e98076d919 in progress.",
+                "Message": "{\"LifecycleHookName\":\"Temp-EcsCluster-LinuxTerminateHook-1IEHTP53JAPAN\",\"AccountId\":\"458712717391\",\"RequestId\":\"612f55e8-6489-4b60-9679-00d611acb5df\",\"LifecycleTransition\":\"autoscaling:EC2_INSTANCE_TERMINATING\",\"AutoScalingGroupName\":\"Temp-EcsCluster-EcsAutoScalingGroup-MJJ1B36CJHBN\",\"Service\":\"AWS Auto Scaling\",\"Time\":\"2017-08-13T06:28:08.089Z\",\"EC2InstanceId\":\"i-01dd2b6e98076d919\",\"LifecycleActionToken\":\"55f584fc-6c94-49d2-8e5b-43953660e92d\"}",
+                "Timestamp": "2017-08-13T06:28:08.125Z",
+                "SignatureVersion": "1",
+                "Signature": "hG+VE2SS6L+09GH0vtQNVBbS3YdQ4s90f6aTpyL4SEMwxA5gtEefoqcqYzJ+ZZHZgv2tJUUc6gYoo5H5sE9J+mFapB2k+y44oAypZT/6IUsLi3pEmPiIy4eoHJQcPit99/LIURXy9tZBAcchE3+9CzN2K3u0v1mh4O7Mofa4YXBn4tU/6hJ85GWdamhXsnkb9es4DLaYAXkGhXoa9r/D3Qc5kyESF4iQo6mL8R3Vs/lNge4rxHbI7QZnJhDdHZspBje9neyv9CCt2Sv2Q+PrcbtUySKueBbT+WWSUcKPVplkOCaH0VkVtpImcbKpuUOrFBk7FHV9YBBaZePfP4PFHQ==",
+                "SigningCertUrl": "https://sns.us-east-2.amazonaws.com/SimpleNotificationService-b95095beb82e8f6a046b3aafc7f4149a.pem",
+                "UnsubscribeUrl": "https://sns.us-east-2.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:us-east-2:458712717391:Temp-EcsCluster-ScalingEvents-YUNFZ149C9FU:c6c24496-d81f-47ff-ae6c-167b909e460f",
+                "MessageAttributes": {}
+            }
+        }
+    ]
+};

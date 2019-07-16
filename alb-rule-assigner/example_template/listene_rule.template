@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template for macro, please refer here for source of truth
+Parameters:
+    CodeBucket:
+        Type: 'String'
+        Default: ''
+    CodeKey:
+        Type: 'String'
+        Default: main.zip
+Resources:
+  Macro:
+    Type: AWS::CloudFormation::Macro
+    Properties:
+      Name: !Sub '${AWS::StackName}'
+      Description: Transform the original template performing a for loop that adds the requested number of Users resources.
+      FunctionName: !Ref MacroProcessor
+  MacroProcessor: 
+    Type: "AWS::Lambda::Function"
+    Properties: 
+      FunctionName: MacroProcessor
+      Runtime: "go1.x"
+      Description: IAM Users Macro processor function
+      Handler: "main"
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Timeout: "100"
+      MemorySize: 128
+      Environment:
+        Variables:
+            LOG_LEVEL: !Ref LogLevel
+            ENVIRONMENT: !Ref Environment
+            RULECAP: 50000
+            AWS_REGION: !Ref 'AWS::Region'
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub MacroProcessor-lambda-role-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+  LambdaPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub MacroProcessor-lambda-policy-${AWS::Region}
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Action: "cloudformation:*"
+            Resource: "*"      
+          -
+            Effect: Allow
+            Action: "logs:*"
+            Resource: "*" 
+          -
+            Effect: Allow
+            Action: "elasticloadbalancing:*"
+            Resource: "*"        
+      Roles:
+        -
+          !Ref LambdaExecutionRole

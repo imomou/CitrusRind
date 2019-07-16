@@ -58,8 +58,7 @@ func HandlerRequest(request LambdaCFNRequest) (*LambdaCFNResponse, error) {
 
 	client := elbv2.New(sess)
 	service := newGeneratorService(client)
-	cfnResponse := &LambdaCFNResponse{
-		RequestID: request.RequestID}
+	cfnResponse := &LambdaCFNResponse{RequestID: request.RequestID}
 
 	listeners := service.GetListernerRules(ListenerArn)
 	randRule, err := service.GetRandomRules(listeners, listenRulecap)
@@ -72,13 +71,13 @@ func HandlerRequest(request LambdaCFNRequest) (*LambdaCFNResponse, error) {
 	} else {
 
 		cfnResponse.Status = "success"
-
 	}
 
 	fragmentResources := request.Fragment
 	fragmentResources.Properties = service.ReplaceFragment(fragmentResources.Properties, randRule)
 
 	if err != nil {
+
 		log.Fatal(fmt.Sprintf("Bad request %s", err))
 	}
 

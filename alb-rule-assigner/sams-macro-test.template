@@ -1,0 +1,1324 @@
+AWSTemplateFormatVersion: 2010-09-09
+#Transform: [test]
+Metadata:
+  DefaultName: NoConfigWeb
+  Dependencies:
+    - TemplatePath: networking/elb-subnets
+      Parameters:
+        VpcId: VpcId
+      Outputs:
+        WebServerSubnets: WebServerSubnets
+      NestedDependency: networking/vpc
+    - TemplatePath: platforms/ecs-base
+      Resources:
+        DatabaseSg: DatabaseSg
+        EcsCluster: EcsCluster
+      Outputs:
+        SharedScalingRole: SharedScalingRole
+    - TemplatePath: inferno/logfarm
+      Resources:
+        LogFarmMpArn: LogFarmMp
+    - TemplatePath: analytics/logs-store
+      Resources:
+        LxDockerLog: LxDockerLog
+        S3AccessLogBucketName: AccessS3Log
+        CloudFrontAccessLogBucket: AccessCfLog
+        OpsAlert: OperationalAlerts
+    - TemplatePath: hosting/loadbalancer
+      Resources:
+        HttpsListener: HttpsListener
+      Outputs:
+        GatewayCanonicalZoneId: GatewayCanonicalZonId
+        GatewayDnsName: GatewayDnsName
+        GatewayName: GatewayName
+    - TemplatePath: networking/private-subnets
+      Resources:
+        DbSubnetGroup: RdsSubnetGroup
+        RedisSubnetGroup: ElasticCacheSubnetGroup
+      NestedDependency: networking/vpc
+    - TemplatePath: development-services/cicd-base
+      Resources:
+        CiDeploymentSg: DeploymentTargetSg
+    - TemplatePath: inferno-appmesh/base
+      Parameters:
+        MeshName: MeshName
+        HostedZone: HostedZone
+        NamespacePrefix: NamespacePrefix
+        DudSubdomain: DudSubdomain
+      Outputs:
+        DiscoveryNamespaceId: DiscoveryNamespaceId
+    - TemplatePath: inferno-appmesh/ingress
+      Resources:
+        TargetGroup: TargetGroup
+    - TemplatePath: networking/vpc
+      Resources:
+        ElbTargetSecGroup: ElbTargetSecGroup
+        ElbSecGroup: ElbSecGroup
+
+Parameters:
+  MeshName:
+    Type: String
+    Description: ''
+  NamespacePrefix:
+    Type: String
+    Description: ''
+  HostedZone:
+    Type: String
+    Description: ''
+  DudSubdomain:
+    Type: String
+    Description: ''
+  DiscoveryNamespaceId:
+    Type: String
+    Description: ''
+  TargetGroup:
+    Type: String
+    Description: ''
+  VirtualNodeName:
+    Type: String
+    Description: ''
+
+  VpcId:
+    Description: 'VPCid associated with the subnets. [elb-subnets.parameters.VpcId]'
+    Type: 'AWS::EC2::VPC::Id'
+  WebServerSubnets:
+    Description: ''
+    Type: CommaDelimitedList
+    Default: ''
+  EcsCluster:
+    Type: String
+    Description: '[ecs-base.resources.EcsCluster]'
+  ImageName:
+    Description: ''
+    Type: String
+    Default: 'tutum/hello-world'
+  LxDockerLog:
+    Description: ''
+    Type: String
+  ContainerPort:
+    Description: ''
+    Type: String
+    Default: '80'
+  HealthUrl:
+    Description: ''
+    Type: String
+    Default: /health
+  SharedScalingRole:
+    Description: ''
+    Type: String
+  ElbTargetSecGroup:
+    Description: ''
+    Type: String
+  ElbSecGroup:
+    Description: ''
+    Type: String
+  Subdomain:
+    Description: Subdomain (Without '.')
+    Type: String
+  Environment:
+    Description: Environment variable that gets sent to the docker instance as CFN_ENV
+    Type: String
+    Default: Dev
+  LogFarmMpArn:
+    Description: ''
+    Type: String
+  CpuReservation:
+    Description: ''
+    Type: String
+    Default: '250'
+  MemoryReservation:
+    Description: ''
+    Type: String
+    Default: '450'
+  ContainerCommand:
+    Description: ''
+    Type: CommaDelimitedList
+    Default: ''
+  HasS3Bucket:
+    Description: ''
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'false'
+  HasCloudfront:
+    Description: ''
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'false'
+  AcmCertificateArn:
+    Description: ''
+    Type: String
+    Default: ''
+  SsmApikey:
+    Description: ''
+    Type: String
+    Default: ''
+
+  # pub/sub
+  SubscriptionOne:
+    Description: 'Notification Arn'
+    Type: String
+    Default: ''
+  SubscriptionTwo:
+    Description: 'Notification Arn'
+    Type: String
+    Default: ''
+  SubscriptionThree:
+    Description: 'Notification Arn'
+    Type: String
+    Default: ''
+
+  # / pub/sub
+  DbStorageQuota:
+    Description: Data disk size for Sql server.
+    Default: '500'
+    Type: Number
+  DbInstanceType:
+    Description: SqlServer instance type
+    Type: String
+    AllowedValues:
+      - ''
+      - db.t2.small
+      - db.t2.medium
+      - db.m3.medium
+      - db.m4.large
+      - db.m4.xlarge
+      - db.m4.2xlarge
+      - db.r3.large
+      - db.r3.xlarge
+      - db.r3.2xlarge
+    ConstraintDescription: must be a valid RDS instance type.
+    Default: ''
+  DbUsername:
+    Description: Sql server username
+    Type: String
+    Default: sqladmin
+  DbPassword:
+    Description: Sql server password
+    Type: String
+    Default: Password1234
+    NoEcho: 'True'
+  DbSnapshot:
+    Description: Sql server snapshot
+    Type: String
+    Default: ''
+  DbSubnetGroup:
+    Description: Subnet Group for hosting the Sql server.
+    Type: String
+  DatabaseSg:
+    Description: Security Group for the databases.
+    Type: String
+  CiDeploymentSg:
+    Description: Security Group for ci/cd deployment.
+    Type: String
+  RedisInstanceType:
+    Description: Type of Redis instance to launch. Leave blank to NOT provision Redis.
+    Type: String
+    ConstraintDescription: Must be a valid ElasticCache instance type.
+    Default: ''
+ 
+  IsPublicFacing:
+    Description: ''
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'false'
+  RedisSubnetGroup:
+    Description: ''
+    Type: String
+  GatewayCanonicalZoneId:
+    Description: ''
+    Type: String
+  GatewayDnsName:
+    Description: ''
+    Type: String
+  GatewayName:
+    Description: ''
+    Type: String
+  HttpsListener:
+    Description: ''
+    Type: String
+  ListenerPriority:
+    Description: ''
+    Type: String
+  DesiredCount:
+    Description: ''
+    Type: String
+    Default: 2
+  DeregistrationDelay:
+    Description: 'The amount time (in seconds) to wait before changing the state of a deregistering target from draining to unused.'
+    Type: Number
+    Default: 300
+
+  S3AccessLogBucketName:
+    Description: Name of bucket for aws s3 access logs.
+    Type: String
+  CloudFrontAccessLogBucket:
+    Description: Name of bucket for aws cloudfront access logs.
+    Type: String
+  OpsAlert:
+    Type: String
+    Default: ''
+  EnableDebugging:
+    Description: ''
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'false'
+  EfsPath:
+    Description: >-
+      EFS disk path segment. It has a /mnt/efs/ prefix followed by the guid of
+      the CloudFormation stack id when left blank.
+    Type: String
+    Default: ''
+  ContainerMountPath:
+    Type: String
+    Default: '/usr/share/nginx/html'
+
+  #CloudFront
+  MinTTL:
+    Type: Number
+    Default: 0
+  DefaultTTL:
+    Type: Number
+    Default: 86400
+  WebACLId:
+    Type: String
+    Default: ''
+  WebACLCustompage:
+    Type: String
+    Default: ''
+  DefaultCdnRoot:
+    Description: ''
+    Type: String
+    Default: 'index.html' 
+  WhitelistHeaders:
+    Type: CommaDelimitedList
+    Default: 'Accept'    
+Conditions:
+  CommandSupplied: !Not 
+    - !Equals 
+      - !Select ['0', !Ref ContainerCommand]
+      - ''
+  IsS3BucketActive: !Equals 
+    - !Ref HasS3Bucket
+    - 'true'
+  IsCloudfrontActive: !Equals 
+    - !Ref HasCloudfront
+    - 'true'
+  HasWhitelistHeaders: !Not 
+    - !Equals 
+      - !Select ['0', !Ref WhitelistHeaders]
+      - ''
+  IsPublicFacingCondition: !Equals 
+    - !Ref IsPublicFacing
+    - 'true'
+  HasWaf: !Not 
+    - !Equals 
+      - !Ref WebACLId
+      - ''
+  HasWebACLCustompage: !Not 
+    - !Equals 
+      - !Ref WebACLCustompage
+      - ''
+  IsNaked: !Equals 
+    - !Ref Subdomain
+    - ''
+  RequiresAuth2SSMaccess: !Not 
+    - !Equals 
+      - !Ref SsmApikey
+      - ''
+
+  # debug conditions
+  IsDebuggingEnabled: !Equals 
+    - !Ref EnableDebugging
+    - 'true'
+  HasNoServers: !Equals [!Ref DesiredCount, 0]
+
+  # pub/sub
+  IsSubscribedOneActive: !Not 
+    - !Equals 
+      - !Ref SubscriptionOne
+      - ''
+  IsSubscribedTwoActive: !Not 
+    - !Equals 
+      - !Ref SubscriptionTwo
+      - ''
+  IsSubscribedThreeActive: !Not 
+    - !Equals 
+      - !Ref SubscriptionThree
+      - ''
+
+  # / pub/
+  HasOpsAlerts: !Not 
+    - !Equals [!Ref 'OpsAlert',  '']
+  IsRedisRequired: !Not 
+    - !Equals [!Ref RedisInstanceType, '']
+  HasRedisAlerts: !And
+    - !Not [!Equals [!Ref 'OpsAlert',  '']]
+    - !Not [!Equals [!Ref 'RedisInstanceType',  '']]
+  
+  HasSqlServer: !Not 
+    - !Equals 
+      - !Ref DbInstanceType
+      - ''
+  HasDbSnapshot: !Not 
+    - !Equals 
+      - !Ref DbSnapshot
+      - ''
+  NeedToMountVolume: !Not 
+  - !Equals 
+    - !Ref ContainerMountPath
+    - ''    
+  HasNoEfsPath: !Equals 
+    - !Ref EfsPath
+    - ''
+  
+Resources:
+
+  # Since this is an ingress controller, there's no virtual service defined
+  # as no traffic will be routed to it.
+  VirtualService:
+    Type: "AWS::AppMesh::VirtualService"
+    Properties:
+      VirtualServiceName: !Sub '${VirtualNodeName}.${NamespacePrefix}.${HostedZone}'
+      MeshName: !Ref MeshName
+      Spec:
+        Provider:
+          VirtualRouter:
+            VirtualRouterName: !GetAtt DefaultRouter.VirtualRouterName
+  # This is to be used for backward compatibility / transition
+  OldVirtualService:
+    Type: "AWS::AppMesh::VirtualService"
+    Properties:
+      VirtualServiceName: !Sub '${Subdomain}.${HostedZone}'
+      MeshName: !Ref MeshName
+      Spec:
+        Provider:
+          VirtualRouter:
+            VirtualRouterName: !GetAtt DefaultRouter.VirtualRouterName
+  DefaultRouter:
+    Type: AWS::AppMesh::VirtualRouter
+    Properties: 
+      MeshName: !Ref MeshName
+      Spec: 
+        Listeners:
+          - PortMapping:
+              Port: 80
+              Protocol: http
+      VirtualRouterName: !Sub '${VirtualNodeName}-default'
+  DefaultRoute:
+    Type: AWS::AppMesh::Route
+    Properties: 
+      MeshName: !Ref MeshName
+      RouteName: !Sub '${VirtualNodeName}-default'
+      Spec: 
+        HttpRoute:
+          Match:
+            Prefix: /
+          Action:
+            WeightedTargets:
+              - VirtualNode: !GetAtt AmVirtualNode.VirtualNodeName
+                Weight: 50
+      VirtualRouterName: !GetAtt DefaultRouter.VirtualRouterName
+  AmVirtualNode:
+    Type: AWS::AppMesh::VirtualNode
+    Properties: 
+      MeshName: !Ref MeshName
+      Spec: 
+        Backends:
+          - VirtualService:
+              VirtualServiceName: 'null.inferno.digital'
+        Listeners:
+          - HealthCheck:
+              HealthyThreshold: 2
+              IntervalMillis: 5000
+              Path: !Ref HealthUrl
+              Port: !Ref ContainerPort
+              Protocol: http
+              TimeoutMillis: 2000
+              UnhealthyThreshold: 2
+            PortMapping:
+              Port: !Ref ContainerPort
+              Protocol: http
+        ServiceDiscovery:
+          DNS:
+            Hostname: !Sub '${VirtualNodeName}.${NamespacePrefix}.${HostedZone}'
+      VirtualNodeName: !Ref VirtualNodeName
+  ServiceDiscovery:
+    Type: 'AWS::ServiceDiscovery::Service' 
+    Properties:
+      Description: noconfigweb service discovery
+      DnsConfig: 
+        DnsRecords: 
+          - Type: A
+            TTL: 2
+        NamespaceId: !Ref DiscoveryNamespaceId
+      HealthCheckCustomConfig: 
+        FailureThreshold: 3
+      Name: !Ref VirtualNodeName
+
+  # Optional local development hooks
+  DevServiceAccount:
+    Type: "AWS::IAM::User"
+    Condition: IsDebuggingEnabled
+    Properties: 
+      ManagedPolicyArns:
+        - !Ref LogFarmMpArn
+      Path: /inferno/dev/
+  DevServiceAccountKey:
+    Type: "AWS::IAM::AccessKey"
+    Condition: IsDebuggingEnabled
+    Properties: 
+      Serial: 0
+      UserName: !If [IsDebuggingEnabled, !Ref DevServiceAccount, "does-not-matter"]
+  # /end local development hooks
+
+  # Optional Utilities
+  Utility:
+    Condition: IsS3BucketActive
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      LoggingConfiguration:
+        DestinationBucketName: !Ref S3AccessLogBucketName
+        LogFilePrefix: !Join 
+          - ''
+          - - !Ref 'AWS::StackName'
+            - '-Utility/'
+
+  Notifications:
+    Type: "AWS::SNS::Topic"
+  RedisCluster:
+    Type: 'AWS::ElastiCache::ReplicationGroup'
+    Condition: IsRedisRequired
+    Properties:
+      AutoMinorVersionUpgrade: 'false'
+      CacheNodeType: !Ref RedisInstanceType
+      CacheParameterGroupName: !Ref RedisParameters
+      NumCacheClusters: 2
+      CacheSubnetGroupName: !Ref RedisSubnetGroup
+      Engine: redis
+      EngineVersion: 3.2.4
+      AutomaticFailoverEnabled: true
+      ReplicationGroupDescription: !Ref AWS::StackName
+      SecurityGroupIds:
+        - !Ref DatabaseSg
+        - !Ref CiDeploymentSg
+  RedisParameters:
+    Type: 'AWS::ElastiCache::ParameterGroup'
+    Condition: IsRedisRequired
+    Properties:
+      CacheParameterGroupFamily: redis3.2
+      Description: !Join 
+        - ''
+        - - !Ref 'AWS::StackName'
+          - '''s Redis ephemeral server parameters. These are per-stack.'
+      Properties:
+        maxmemory-policy: allkeys-lru
+  WebsiteCloudfront:
+    Type: 'AWS::CloudFront::Distribution'
+    Condition: IsCloudfrontActive
+    Properties:
+      DistributionConfig:
+        Comment: Cloudfront Distribution pointing to S3 bucket
+        Logging:
+          IncludeCookies: 'true'
+          Bucket: !Sub '${CloudFrontAccessLogBucket}.s3.amazonaws.com'
+          Prefix: !Sub '${AWS::StackName}-WebsiteCloudfront'
+        Origins: 
+            - Id: S3Origin 
+              DomainName: !If [IsNaked, !Sub 'origin.${HostedZone}', !Sub '${Subdomain}-origin.${HostedZone}']
+              CustomOriginConfig:
+                HTTPPort: '80'
+                HTTPSPort: '443'
+                OriginProtocolPolicy: https-only
+        Enabled: true
+        HttpVersion: http2
+        IPV6Enabled: true
+        DefaultRootObject: !Ref DefaultCdnRoot
+        Aliases: !If [IsNaked, [!Sub '${HostedZone}', !Sub 'cdn.${HostedZone}'],[!Sub '${Subdomain}.${HostedZone}', !Sub '${Subdomain}-cdn.${HostedZone}']]
+        CustomErrorResponses:
+          - ErrorCachingMinTTL: 3
+            ErrorCode: 400
+          - ErrorCachingMinTTL: 3
+            ErrorCode: 403
+            ResponseCode: !If [HasWebACLCustompage, 403, !Ref 'AWS::NoValue']
+            ResponsePagePath: !If [HasWebACLCustompage, !Ref WebACLCustompage, !Ref 'AWS::NoValue'] 
+          - ErrorCachingMinTTL: 3
+            ErrorCode: 404
+          - ErrorCachingMinTTL: 3
+            ErrorCode: 500
+          - ErrorCachingMinTTL: 3
+            ErrorCode: 503
+        DefaultCacheBehavior:
+          CachedMethods: ["GET", "HEAD", "OPTIONS"]
+          AllowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+          Compress: true
+          TargetOriginId: S3Origin
+          ForwardedValues:
+            QueryString: true
+            Cookies:
+              Forward: none
+            Headers: !If
+             - HasWhitelistHeaders
+             - !Ref WhitelistHeaders
+             - []
+          ViewerProtocolPolicy: redirect-to-https
+          MinTTL: !Ref MinTTL
+          DefaultTTL: !Ref DefaultTTL
+        WebACLId: !If
+          - HasWaf
+          - !Ref WebACLId
+          - !Ref AWS::NoValue
+        PriceClass: PriceClass_All
+        ViewerCertificate:
+          AcmCertificateArn: !Ref AcmCertificateArn
+          SslSupportMethod: sni-only
+  Route53CdnOrigin:
+    Type: 'AWS::Route53::RecordSet'
+    Condition: IsCloudfrontActive
+    Properties:
+      HostedZoneName: !Sub '${HostedZone}.'
+      Comment: Hostname
+      Name: !If
+        - IsNaked
+        - !Sub 'origin.${HostedZone}'
+        - !Sub '${Subdomain}-origin.${HostedZone}'
+      Type: A
+      AliasTarget:
+        DNSName: !Ref GatewayDnsName
+        HostedZoneId: !Ref GatewayCanonicalZoneId
+  Route53Cdn:
+    Type: 'AWS::Route53::RecordSet'
+    Condition: IsCloudfrontActive
+    Properties:
+      HostedZoneName: !Sub '${HostedZone}.'
+      Comment: Hostname
+      Name: !If
+        - IsNaked
+        - !Sub 'cdn.${HostedZone}'
+        - !Sub '${Subdomain}-cdn.${HostedZone}'
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt [WebsiteCloudfront, DomainName]
+        HostedZoneId: Z2FDTNDATAQYW2
+  # /Optional Utilities
+
+  # Optional Subscriptions
+  SourceQueue: 
+    Type: "AWS::SQS::Queue"
+    Condition: IsSubscribedOneActive
+    Properties: 
+      RedrivePolicy: 
+        deadLetterTargetArn: !Sub ${DeadLetterQueue.Arn}
+        maxReceiveCount: 5
+  DeadLetterQueue: 
+    Type: "AWS::SQS::Queue"
+    Condition: IsSubscribedOneActive
+  QueueSubscriptionOne:
+    Type: AWS::SNS::Subscription
+    Condition: IsSubscribedOneActive
+    Properties:
+      Endpoint: !Sub ${SourceQueue.Arn}
+      Protocol: sqs
+      TopicArn: !Ref 'SubscriptionOne'
+  QueueSubscriptionTwo:
+    Type: AWS::SNS::Subscription
+    Condition: IsSubscribedTwoActive
+    Properties:
+      Endpoint: !Sub ${SourceQueue.Arn}
+      Protocol: sqs
+      TopicArn: !Ref 'SubscriptionTwo'
+  QueueSubscriptionThree:
+    Type: AWS::SNS::Subscription
+    Condition: IsSubscribedThreeActive
+    Properties:
+      Endpoint: !Sub ${SourceQueue.Arn}
+      Protocol: sqs
+      TopicArn: !Ref 'SubscriptionThree'
+  LogQueuePolicy:
+    Type: 'AWS::SQS::QueuePolicy'
+    Condition: IsSubscribedOneActive
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Id: LogQueuePolicy
+        Statement: 
+          - !If 
+            - IsSubscribedOneActive
+            - Effect: "Allow"
+              Principal: "*"
+              Action: ["sqs:SendMessage"]
+              Resource: "*"
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: !Ref SubscriptionOne
+            - !Ref 'AWS::NoValue'
+          - !If 
+            - IsSubscribedTwoActive
+            - Effect: "Allow"
+              Principal: "*"
+              Action: ["sqs:SendMessage"]
+              Resource: "*"
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: !Ref SubscriptionTwo
+            - !Ref 'AWS::NoValue'
+          - !If 
+            - IsSubscribedThreeActive
+            - Effect: "Allow"
+              Principal: "*"
+              Action: ["sqs:SendMessage"]
+              Resource: "*"
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: !Ref SubscriptionThree
+            - !Ref 'AWS::NoValue'
+      Queues: [!Ref 'SourceQueue']
+
+  Database:
+    Type: 'AWS::RDS::DBInstance'
+    Condition: HasSqlServer
+    Properties:
+      VPCSecurityGroups:
+        - !Ref DatabaseSg
+        - !Ref CiDeploymentSg
+      AllocatedStorage: !Ref DbStorageQuota
+      DBInstanceClass: !Ref DbInstanceType
+      DBParameterGroupName: !Ref DbParamGroup
+      Engine: sqlserver-web
+      EngineVersion: 13.00.4422.0.v1
+      MasterUsername: !Ref DbUsername
+      MasterUserPassword: !Ref DbPassword
+      DBSnapshotIdentifier: !If 
+        - HasDbSnapshot
+        - !Ref DbSnapshot
+        - !Ref 'AWS::NoValue'
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      StorageType: gp2
+      Timezone: 'AUS Eastern Standard Time'
+  DbParamGroup:
+    Type: 'AWS::RDS::DBParameterGroup'
+    Condition: HasSqlServer
+    Properties:
+      Description: Database Parameter Group
+      Family: sqlserver-web-13.0
+      Parameters: {}
+  Route53:
+    Type: 'AWS::Route53::RecordSet'
+    Properties:
+      HostedZoneName: !Sub '${HostedZone}.'
+      Comment: Hostname
+      Name: !If
+        - IsNaked
+        - !Ref HostedZone
+        - !Join [.,[!Ref Subdomain, !Ref HostedZone,'']]
+      Type: A
+      AliasTarget:
+        DNSName: !If
+          - IsCloudfrontActive
+          - !GetAtt [WebsiteCloudfront, DomainName]
+          - !Ref GatewayDnsName
+        HostedZoneId: !If 
+          - IsCloudfrontActive
+          - Z2FDTNDATAQYW2
+          - !Ref GatewayCanonicalZoneId   
+  Route53Ipv6:
+    Type: 'AWS::Route53::RecordSet'
+    Properties:
+      HostedZoneName: !Sub '${HostedZone}.'
+      Comment: Hostname
+      Name: !If
+        - IsNaked
+        - !Ref HostedZone 
+        - !Join [.,[!Ref Subdomain, !Ref HostedZone,'']]
+      Type: AAAA
+      AliasTarget:
+        DNSName: !If
+          - IsCloudfrontActive
+          - !GetAtt [WebsiteCloudfront, DomainName]
+          - !Ref GatewayDnsName
+        HostedZoneId: !If 
+          - IsCloudfrontActive
+          - Z2FDTNDATAQYW2
+          - !Ref GatewayCanonicalZoneId             
+  EcsServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: ecs-service
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
+                  - 'elasticloadbalancing:DeregisterTargets'
+                  - 'elasticloadbalancing:Describe*'
+                  - 'elasticloadbalancing:RegisterInstancesWithLoadBalancer'
+                  - 'elasticloadbalancing:RegisterTargets'
+                  - 'ec2:Describe*'
+                  - 'ec2:AuthorizeSecurityGroupIngress'
+                Resource: '*'
+  TaskRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - !Ref LogFarmMpArn
+      Policies:
+      - !If
+        - IsSubscribedOneActive
+        -
+          PolicyName: "param-store"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+                - Effect: 'Allow'
+                  Action: ['sqs:*']
+                  Resource: 
+                    - !GetAtt [SourceQueue , Arn]
+                    - !GetAtt [DeadLetterQueue , Arn]
+        - !Ref 'AWS::NoValue'
+      - !If
+        - RequiresAuth2SSMaccess
+        -
+          PolicyName: "auth2-ssm-access"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+            - Sid: ''
+              Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/*"
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+              Resource: !Sub "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/${SsmApikey}"
+        - !Ref 'AWS::NoValue'
+  OptionalPolicies:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      Groups: []
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'sns:Publish'
+            Resource: !Ref Notifications
+          - !If
+            - IsS3BucketActive
+            - Effect: Allow
+              Action:
+                - 's3:*'
+              Resource:
+                - !Sub 'arn:aws:s3:::${Utility}/*'
+                - !Sub 'arn:aws:s3:::${Utility}'
+            - !Ref 'AWS::NoValue'
+          - !If 
+            - IsRedisRequired
+            - Action:
+                - 'elasticache:DescribeCacheClusters'
+              Effect: Allow
+              Resource: !Sub 'arn:aws:elasticache:${AWS::Region}:${AWS::AccountId}:cluster:${RedisCluster}'
+            - !Ref 'AWS::NoValue'
+          - Effect: Allow
+            Action: ['cloudfront:CreateInvalidation']
+            Resource: '*'
+      PolicyName: s3-bucket-policy
+      Roles: [!Ref TaskRole]
+      Users:
+        - !If
+          - IsDebuggingEnabled
+          - !Ref DevServiceAccount
+          - !Ref AWS::NoValue
+  TaskDef:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      ContainerDefinitions:
+        - Command: !If 
+            - CommandSupplied
+            - !Ref ContainerCommand
+            - !Ref 'AWS::NoValue'
+          Name: generic-web
+          Cpu: !Ref CpuReservation
+          Essential: 'true'
+          Image: !Ref ImageName
+          Memory: !Ref MemoryReservation
+          Environment:
+            - Name: CFN_ENV
+              Value: !Ref Environment
+            - Name: ASPNETCORE_ENVIRONMENT
+              Value: !Ref Environment
+            - Name: CFN_STACK_NAME
+              Value: !Ref 'AWS::StackName'
+            - Name: CFN_STACK_ID
+              Value: !Ref 'AWS::StackId'
+            - Name: CFN_NOTIFICATION
+              Value: !Ref Notifications
+            - !If 
+              - HasSqlServer
+              - Name: CFN_MSSQLHOST
+                Value: !GetAtt 
+                  - Database
+                  - Endpoint.Address
+              - !Ref 'AWS::NoValue'
+            - Name: CFN_MSSQLUSERNAME
+              Value: !Ref DbUsername
+            - Name: CFN_MSSQLPASSWORD
+              Value: !Ref DbPassword
+            - Name: CFN_HOSTNAME
+              Value: !Sub '${Subdomain}.${HostedZone}'
+            - !If
+              - IsCloudfrontActive
+              - Name: CFN_CDNHOST
+                Value: !Sub '${Subdomain}.${HostedZone}'
+              - !Ref 'AWS::NoValue'
+            - !If 
+              - IsS3BucketActive
+              - Name: CFN_S3BUCKET
+                Value: !Ref Utility
+              - !Ref 'AWS::NoValue'
+            - !If 
+              - IsRedisRequired
+              - Name: CFN_REDISADDRESS
+                Value: !GetAtt 
+                  - RedisCluster
+                  - PrimaryEndPoint.Address
+              - !Ref 'AWS::NoValue'
+            - !If 
+              - IsRedisRequired
+              - Name: CFN_REDISECNAME
+                Value: !Ref RedisCluster
+              - !Ref 'AWS::NoValue'
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LxDockerLog
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: !Ref 'AWS::StackName'
+          MountPoints: !If
+            - NeedToMountVolume
+            - - SourceVolume: efs
+                ContainerPath: !Ref ContainerMountPath
+                ReadOnly: false
+            - !Ref AWS::NoValue 
+        - Command: !If
+            - CommandSupplied
+            - !Ref ContainerCommand
+            - !Ref 'AWS::NoValue'
+          Name: envoy-proxy
+          Cpu: !Ref CpuReservation
+          Essential: 'true'
+          Image: '111345817488.dkr.ecr.us-west-2.amazonaws.com/aws-appmesh-envoy:v1.9.1.0-prod'
+          Memory: !Ref MemoryReservation
+          Environment:
+            - Name: APPMESH_VIRTUAL_NODE_NAME
+              Value: !Sub "mesh/${MeshName}/virtualNode/${VirtualNodeName}"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LxDockerLog
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: !Ref 'AWS::StackName'
+          HealthCheck:
+            Command:
+              - "CMD-SHELL"
+              - "curl -s http://localhost:9901/server_info | grep state | grep -q LIVE"
+            StartPeriod: 10
+            Interval: 5
+            Timeout: 2
+            Retries: 3
+          User: 1337
+      ProxyConfiguration:
+        ContainerName: envoy-proxy
+        ProxyConfigurationProperties: 
+          - Name: IgnoredUID
+            Value: 1337
+          - Name: ProxyIngressPort
+            Value: 15000
+          - Name: ProxyEgressPort
+            Value: 15001
+          - Name: AppPorts
+            Value: !Ref ContainerPort
+          - Name: EgressIgnoredIPs
+            Value: "169.254.170.2,169.254.169.254"
+        Type: APPMESH
+      NetworkMode: awsvpc
+      TaskRoleArn: !Ref TaskRole
+      Volumes:
+        - !If
+          - NeedToMountVolume
+          - Name: efs
+            Host:
+              SourcePath: !Sub
+                - /mnt/efs/{PathSuffix}
+                - PathSuffix: !If 
+                  - HasNoEfsPath
+                  - !Select ['2', !Split [/, !Ref 'AWS::StackId']]
+                  - !Ref EfsPath
+          - !Ref AWS::NoValue
+  EcsService:
+    Type: 'AWS::ECS::Service'
+    Properties:
+      Cluster: !Ref EcsCluster
+      DesiredCount: !Ref DesiredCount
+      ServiceRegistries:
+        - RegistryArn: !GetAtt ServiceDiscovery.Arn
+      TaskDefinition: !Ref TaskDef
+      PlacementStrategies:
+        - Type: spread
+          Field: attribute:ecs.availability-zone
+        - Type: spread
+          Field: instanceId
+      NetworkConfiguration: 
+        AwsvpcConfiguration:
+          SecurityGroups: 
+            - !Ref ElbTargetSecGroup
+            - !Ref ElbSecGroup
+          Subnets: !Ref WebServerSubnets
+  ServiceCapacityScalingTarget:
+    Type: 'AWS::ApplicationAutoScaling::ScalableTarget'
+    DependsOn: EcsService
+    Properties:
+      MaxCapacity: !If [HasNoServers, 0, 10]
+      MinCapacity: !If [HasNoServers, 0, 2]
+      ResourceId: !Sub 'service/${EcsCluster}/${EcsService.Name}'
+      RoleARN: !GetAtt AutoscalingRole.Arn
+      ScalableDimension: 'ecs:service:DesiredCount'
+      ServiceNamespace: ecs
+  ServiceScalingUpPolicy:
+    Type: 'AWS::ApplicationAutoScaling::ScalingPolicy'
+    Properties:
+      PolicyName: !Join 
+        - ''
+        - - !Ref 'AWS::StackName'
+          - '-ScaleUpPolicy'
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ServiceCapacityScalingTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: PercentChangeInCapacity
+        Cooldown: 60
+        MetricAggregationType: Average
+        StepAdjustments:
+          - MetricIntervalLowerBound: 15
+            ScalingAdjustment: 200
+          - MetricIntervalUpperBound: 15
+            MetricIntervalLowerBound: 0
+            ScalingAdjustment: 100
+  ServiceScalingDownPolicy:
+    Type: 'AWS::ApplicationAutoScaling::ScalingPolicy'
+    Properties:
+      PolicyName: !Join 
+        - ''
+        - - !Ref 'AWS::StackName'
+          - '-ScaleDownPolicy'
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ServiceCapacityScalingTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 60
+        MetricAggregationType: Average
+        StepAdjustments:
+          - MetricIntervalUpperBound: 0
+            ScalingAdjustment: -1
+  CpuAlarmScaleUp:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: '70'
+      AlarmDescription: CPU based out scaling.
+      Period: '60'
+      AlarmActions:
+        - !Ref ServiceScalingUpPolicy
+      Namespace: AWS/ECSz
+      Dimensions:
+        - Name: ServiceName
+          Value: !GetAtt 
+            - EcsService
+            - Name
+        - Name: ClusterName
+          Value: !Ref EcsCluster
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: CPUUtilization
+  CpuAlarmScaleDown:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      EvaluationPeriods: '2'
+      Statistic: Average
+      Threshold: '30'
+      AlarmDescription: CPU based in scaling.
+      Period: '60'
+      AlarmActions:
+        - !Ref ServiceScalingDownPolicy
+      Namespace: AWS/ECS
+      Dimensions:
+        - Name: ServiceName
+          Value: !GetAtt 
+            - EcsService
+            - Name
+        - Name: ClusterName
+          Value: !Ref EcsCluster
+      ComparisonOperator: LessThanThreshold
+      MetricName: CPUUtilization
+  AutoscalingRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - application-autoscaling.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: service-autoscaling
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'application-autoscaling:*'
+                  - 'cloudwatch:DescribeAlarms'
+                  - 'cloudwatch:PutMetricAlarm'
+                  - 'ecs:DescribeServices'
+                  - 'ecs:UpdateService'
+                Resource: '*'
+
+  # Listener Rules. Separated as CFN on update will try to create a new listener
+  # rule without a new target group which causes an error.
+  ListenerRule:
+    Fn::Transform:
+      Name: 'test'
+      Parameters:
+        target: !Ref HttpsListener
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Condition: IsPublicFacingCondition
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      Conditions:
+        - Field: host-header
+          Values: !If
+            - IsCloudfrontActive
+            - - !If [IsNaked, !Sub 'origin.${HostedZone}', !Sub '${Subdomain}-origin.${HostedZone}']
+            - - !If [IsNaked, !Sub '.${HostedZone}', !Sub '${Subdomain}.${HostedZone}']
+      ListenerArn: !Ref HttpsListener
+      # Fn::Transform:
+      #   Name: 'test'
+      #   Parameters:
+      #     target: !Ref HttpsListener
+      #Priority: '$$REPLACEMENT$$'
+      # 'Fn::Transform':
+      #   Name: 'test'
+      #   Parameters:
+      #     target: !Ref HttpsListener
+
+  # / Listner Rules
+
+  # ### Operational Alarms ###
+  ContainerMemoryAlert:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasOpsAlerts
+    Properties:
+      AlarmDescription: Alarm when ECS service memory is high.
+      AlarmActions:
+        - !Ref OpsAlert
+      InsufficientDataActions:
+        - !Ref OpsAlert
+      MetricName: MemoryUtilization
+      Namespace: AWS/ECS
+      Statistic: Maximum
+      Period: '60'
+      EvaluationPeriods: '1'  
+      Threshold: '90'
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ServiceName
+          Value: !GetAtt EcsService.Name
+        - Name: ClusterName
+          Value: !Ref EcsCluster
+
+  # Redis Alarm Group 1
+  Redis1CpuAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Condition: HasRedisAlerts
+    Properties:
+      AlarmDescription: Alarm when redis cpu high.
+      AlarmActions:
+        - !Ref OpsAlert
+      InsufficientDataActions:
+        - !Ref OpsAlert
+      MetricName: CPUUtilization
+      Namespace: AWS/ElastiCache
+      Statistic: Average
+      Period: '60'
+      EvaluationPeriods: '3'
+      Threshold: '80'
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: CacheClusterId
+          Value: !Sub ${RedisCluster}-001
+  Redis1MemoryAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Condition: HasRedisAlerts
+    Properties:
+      AlarmDescription: Alarm when redis memory low.
+      AlarmActions:
+        - !Ref OpsAlert
+      InsufficientDataActions:
+        - !Ref OpsAlert
+      MetricName: FreeableMemory
+      Namespace: AWS/ElastiCache
+      Statistic: Average
+      Period: '60'
+      EvaluationPeriods: '3'
+      Threshold: '300000000'
+      ComparisonOperator: LessThanThreshold
+      Dimensions:
+        - Name: CacheClusterId
+          Value: !Sub ${RedisCluster}-001
+  Redis1EvictionAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Condition: HasRedisAlerts
+    Properties:
+      AlarmDescription: Alarm when redis starts evicting items.
+      AlarmActions:
+        - !Ref OpsAlert
+      InsufficientDataActions:
+        - !Ref OpsAlert
+      MetricName: Evictions
+      Namespace: AWS/ElastiCache
+      Statistic: Sum
+      Period: '60'
+      EvaluationPeriods: '1'
+      Threshold: '3'
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: CacheClusterId
+          Value: !Sub ${RedisCluster}-001
+  # Redis Alarm Group 1
+  Redis2CpuAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Condition: HasRedisAlerts
+    Properties:
+      AlarmDescription: Alarm when redis cpu high.
+      AlarmActions:
+        - !Ref OpsAlert
+      InsufficientDataActions:
+        - !Ref OpsAlert
+      MetricName: CPUUtilization
+      Namespace: AWS/ElastiCache
+      Statistic: Average
+      Period: '60'
+      EvaluationPeriods: '3'
+      Threshold: '80'
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: CacheClusterId
+          Value: !Sub ${RedisCluster}-002
+  Redis2MemoryAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Condition: HasRedisAlerts
+    Properties:
+      AlarmDescription: Alarm when redis memory low.
+      AlarmActions:
+        - !Ref OpsAlert
+      InsufficientDataActions:
+        - !Ref OpsAlert
+      MetricName: FreeableMemory
+      Namespace: AWS/ElastiCache
+      Statistic: Average
+      Period: '60'
+      EvaluationPeriods: '3'
+      Threshold: '300000000'
+      ComparisonOperator: LessThanThreshold
+      Dimensions:
+        - Name: CacheClusterId
+          Value: !Sub ${RedisCluster}-002
+  Redis2EvictionAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Condition: HasRedisAlerts
+    Properties:
+      AlarmDescription: Alarm when redis starts evicting items
+      AlarmActions:
+        - !Ref OpsAlert
+      InsufficientDataActions:
+        - !Ref OpsAlert
+      MetricName: Evictions
+      Namespace: AWS/ElastiCache
+      Statistic: Sum
+      Period: '60'
+      EvaluationPeriods: '1'
+      Threshold: '3'
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: CacheClusterId
+          Value: !Sub ${RedisCluster}-002
+  # ### Operational Alarms ###
+
+  Route53HealthCheck:
+    Type: AWS::Route53::HealthCheck
+    Properties:
+      HealthCheckConfig:
+        Port: '443'
+        Type: 'HTTPS'
+        ResourcePath: !Ref HealthUrl
+        FullyQualifiedDomainName: !If
+          - IsCloudfrontActive
+          - !If [IsNaked, !Sub 'origin.${HostedZone}', !Sub '${Subdomain}-origin.${HostedZone}']
+          - !If [IsNaked, !Sub '.${HostedZone}', !Sub '${Subdomain}.${HostedZone}']
+        RequestInterval: '30'
+        FailureThreshold: '3'
+      HealthCheckTags: 
+        - Key: Name
+          Value: !Sub '${Subdomain} Alarm'          
+
+Outputs:
+  DevServiceAccountKey:
+    Condition: IsDebuggingEnabled
+    Value: !Ref DevServiceAccountKey
+  DevServiceAccountValue:
+    Condition: IsDebuggingEnabled
+    Value: !GetAtt DevServiceAccountKey.SecretAccessKey
+  MountPath:
+    Condition: NeedToMountVolume
+    Value: !Join 
+      - ''
+      - - /mnt/efs/
+        - !If 
+          - HasNoEfsPath
+          - !Select 
+            - '2'
+            - !Split 
+              - /
+              - !Ref 'AWS::StackId'
+          - !Ref EfsPath

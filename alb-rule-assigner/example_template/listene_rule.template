@@ -34,7 +34,7 @@ Resources:
         Variables:
             LOG_LEVEL: !Ref LogLevel
             RULECAP: 50000
-            AWS_REGION: !Ref 'AWS::Region'
+            REGION: !Ref 'AWS::Region'
 
   LambdaExecutionRole:
     Type: AWS::IAM::Role

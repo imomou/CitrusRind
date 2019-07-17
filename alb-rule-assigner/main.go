@@ -43,7 +43,7 @@ type LambdaCFNResponse struct {
 func HandlerRequest(request LambdaCFNRequest) (*LambdaCFNResponse, error) {
 
 	listenRulecap, err := strconv.Atoi(os.Getenv("RULECAP"))
-	region := os.Getenv("AWS_REGION")
+	region := os.Getenv("REGION")
 	params := request.Params
 
 	ListenerArn := fmt.Sprintf("%v", params["target"])

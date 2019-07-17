@@ -7,6 +7,9 @@ Parameters:
     CodeKey:
         Type: 'String'
         Default: main.zip
+    LogLevel:
+        Type: 'String'
+        Default: 30
 Resources:
   Macro:
     Type: AWS::CloudFormation::Macro
@@ -30,7 +33,6 @@ Resources:
       Environment:
         Variables:
             LOG_LEVEL: !Ref LogLevel
-            ENVIRONMENT: !Ref Environment
             RULECAP: 50000
             AWS_REGION: !Ref 'AWS::Region'
 

@@ -1,7 +1,6 @@
 FROM golang:1.12.7-alpine3.10
 
 RUN apk add git
-
 RUN apk add zip
 
 WORKDIR /app
@@ -10,6 +9,7 @@ COPY . .
 
 RUN go get -d ./...
 
-RUN go build -o main .
+#https://github.com/serverless/serverless/issues/4710
+RUN go build -v -ldflags '-d -s -w' -a -tags netgo -installsuffix netgo -o main .
 
 RUN zip main.zip main

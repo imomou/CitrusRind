@@ -1,7 +1,7 @@
 FROM golang:1.12.7-alpine3.10
 
-RUN apk add git
-RUN apk add zip
+#RUN apk add git
+#RUN apk add zip
 
 WORKDIR /app
 

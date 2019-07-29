@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"math/rand"
 	"strconv"
@@ -11,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/elbv2"
 )
 
-// GeneratorService blah blah
+// GeneratorService Constructor Poco
 type GeneratorService struct {
 	elbv2Service *elbv2.ELBV2
 }
@@ -21,22 +20,20 @@ func newGeneratorService(elbv2Service *elbv2.ELBV2) *GeneratorService {
 }
 
 // GetListernerRules Get Listener Rules
-func (service *GeneratorService) GetListernerRules(ListenerArn string) []*elbv2.Rule {
+func (service *GeneratorService) GetListernerRules(ListenerArn string) ([]*elbv2.Rule, error) {
 
 	results, err := service.elbv2Service.DescribeRules(&elbv2.DescribeRulesInput{
 		ListenerArn: &ListenerArn})
 
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	return results.Rules
+	return results.Rules, err
 }
 
-// GetRandomRules stuff
+// GetRandomRules : Expected <=listenRulecap, -1 not able to randomly generate rule
 func (service *GeneratorService) GetRandomRules(rules []*elbv2.Rule, listenRulecap int) (int, error) {
 
 	iter := 0
+	//https://flaviocopes.com/go-random/
+	//https://www.calhoun.io/creating-random-strings-in-go/
 	s := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(s)
 	l := listenRulecap + 1
@@ -53,7 +50,7 @@ func (service *GeneratorService) GetRandomRules(rules []*elbv2.Rule, listenRulec
 	return -1, errors.New("Unable to allocate errors")
 }
 
-// ReplaceFragment stuff
+// ReplaceFragment Inside the map, replace Priority key
 func (service *GeneratorService) ReplaceFragment(properties map[string]interface{}, value int) map[string]interface{} {
 
 	properties["Priority"] = value

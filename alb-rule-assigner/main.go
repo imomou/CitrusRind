@@ -53,35 +53,28 @@ func HandlerRequest(request LambdaCFNRequest) (*LambdaCFNResponse, error) {
 	})
 
 	if err != nil {
-		log.Fatal(fmt.Sprintf("Bad request %s", err))
+		log.Fatal(fmt.Sprintf("Unable to initialise session %s", err))
+		return nil, err
 	}
 
 	client := elbv2.New(sess)
 	service := newGeneratorService(client)
 	cfnResponse := &LambdaCFNResponse{RequestID: request.RequestID}
 
-	listeners := service.GetListernerRules(ListenerArn)
-	randRule, err := service.GetRandomRules(listeners, listenRulecap)
+	listeners, err := service.GetListernerRules(ListenerArn)
+	randRule, err1 := service.GetRandomRules(listeners, listenRulecap)
 
-	if err != nil {
-
-		log.Fatal(fmt.Sprintf("%s", err))
+	if err != nil || err1 != nil {
+		log.Fatal(fmt.Sprintf("GetListernerRules:  %s, GetRandomRules: %s", err, err1))
 		cfnResponse.Status = "failure"
-
 	} else {
-
 		cfnResponse.Status = "success"
 	}
 
 	fragmentResources := request.Fragment
 	fragmentResources.Properties = service.ReplaceFragment(fragmentResources.Properties, randRule)
-
-	if err != nil {
-
-		log.Fatal(fmt.Sprintf("Bad request %s", err))
-	}
-
 	cfnResponse.Fragment = fragmentResources
+
 	return cfnResponse, err
 }
 

@@ -1,0 +1,35 @@
+resources:
+- name: github-citrus-rind
+  type: git
+  source:
+    uri: https://github.com/Bit-Clouded/CitrusRind.git
+
+jobs:
+  - name: build-job
+    public: true
+    plan:
+      - get: github-citrus-rind
+        trigger: true
+      - task: build
+        config:
+          platform: linux
+          inputs:
+            - name: github-citrus-rind
+              path: /
+          image_resource:
+            type: docker-image
+            source:
+              repository: golang
+              tag: 1.12.7-alpine3.10
+          run:
+            path: /bin/sh
+            dir: alb-rule-assigner
+            args:
+              - -c
+              - |
+                chmod +x ./build-stuff/build.sh
+                sh build-stuff/build.sh
+
+          #outputs:
+          #  - name: lambda-zip
+          #    path: ./artifacts

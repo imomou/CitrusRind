@@ -30,6 +30,7 @@ jobs:
     public: true
     plan:
       - get: golang-build-container
+        passed: ['build-container']
         trigger: true
       - get: github-cr-alb-rule-assigner
         trigger: true

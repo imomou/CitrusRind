@@ -4,13 +4,13 @@ resources:
   source:
     uri: https://github.com/Bit-Clouded/CitrusRind.git
     branch: ci/concourse
-    paths: ['build-images/golang/**/*']
+    paths: ['build-images/golang/*']
 - name: github-cr-alb-rule-assigner
   type: git
   source:
     uri: https://github.com/Bit-Clouded/CitrusRind.git
     branch: ci/concourse
-    #paths: ['alb-rule-assigner/*']
+    paths: ['alb-rule-assigner/*', 'alb-rule-assigner/**/*']
 
 - name: golang-build-container
   type: docker-image
@@ -18,7 +18,7 @@ resources:
     repository: 458712717391.dkr.ecr.us-west-2.amazonaws.com/test
 
 jobs:
-  - name: build-job
+  - name: build-container
     public: true
     plan:
       - get: github-cr-golang-build-container
@@ -26,6 +26,11 @@ jobs:
       - put: golang-build-container
         params:
           build: github-cr-golang-build-container/build-images/golang
+  - name: build-lambda
+    public: true
+    plan:
+      - get: golang-build-container
+        trigger: true
       - get: github-cr-alb-rule-assigner
         trigger: true
       - task: build

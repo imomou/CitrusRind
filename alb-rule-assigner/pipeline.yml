@@ -22,7 +22,7 @@ jobs:
     public: true
     plan:
       - get: github-cr-golang-build-container
-        trigger: false
+        trigger: true
       - put: golang-build-container
         params:
           build: github-cr-golang-build-container/build-images/golang
@@ -47,6 +47,7 @@ jobs:
               - -c
               - |
                 go get -d ./...
+                #https://github.com/serverless/serverless/issues/4710
                 go build -v -ldflags '-d -s -w' -a -tags netgo -installsuffix netgo -o main .
                 zip ../lambda-zip/main.zip main
           outputs:

@@ -55,7 +55,6 @@ resources:
     type: s3
     source:
       bucket: ((default-cicd-bucket))
-      region_name: us-west-2
       << : *alb-priotiy-assigner-bucket-config
   
   - name: alb-priority-assigner-ver

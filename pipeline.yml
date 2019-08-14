@@ -193,6 +193,7 @@ jobs:
       - put: test-bucket
         params:
           file: lambda-zip/default-*.zip
+          acl: public-read
       - put: alb-priority-assigner-ver
         params:
           file: alb-priority-assigner-ver/number
@@ -229,6 +230,7 @@ jobs:
       - put: test-bucket
         params:
           file: lambda-zip/default-*.zip
+          acl: public-read
       - in_parallel:
         - put: release-bucket-ap-northeast-1
           params:

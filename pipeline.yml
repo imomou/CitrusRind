@@ -130,6 +130,7 @@ jobs:
             args:
               - -c
               - |
+                cp ./lambda-bucket/default-*.zip ./lambda-zip/default.zip
                 mv ./lambda-bucket/default-*.zip ./lambda-zip/default-$(cat ./lambda-ver/number).zip
           outputs:
             - name: lambda-zip

@@ -29,20 +29,17 @@ resources:
     type: git
     source:
       uri: https://github.com/Bit-Clouded/CitrusRind.git
-      branch: ci/concourse
       paths: ['pipeline.yml']
   
   - name: github-cr-golang-build-container
     type: git
     source:
       uri: https://github.com/Bit-Clouded/CitrusRind.git
-      branch: ci/concourse
       paths: ['build-images/golang/*']
   - name: github-cr-alb-rule-assigner
     type: git
     source:
       uri: https://github.com/Bit-Clouded/CitrusRind.git
-      branch: ci/concourse
       paths: ['alb-rule-assigner/*', 'alb-rule-assigner/**/*']
   
   - name: golang-build-container

@@ -1,4 +1,24 @@
+resource_types:
+- name: concourse-pipeline
+  type: docker-image
+  source:
+    repository: concourse/concourse-pipeline-resource
+
 resources:
+- name: citrus-rind-pipeline
+  type: concourse-pipeline
+  source:
+    teams:
+    - name: main                                   (1)
+      username: ((concourse-main-username))
+      password: ((concourse-main-password))
+- name: github-cr-pipeline
+  type: git
+  source:
+    uri: https://github.com/Bit-Clouded/CitrusRind.git
+    branch: ci/concourse
+    paths: ['pipeline.yml']
+
 - name: github-cr-golang-build-container
   type: git
   source:
@@ -40,9 +60,25 @@ resources:
     initial_version: 0.0.0
 
 jobs:
+
+  - name: set-my-pipelines
+    plan:
+      - get: github-cr-pipeline
+        trigger: true
+      - put: citrus-rind-pipeline
+        params:
+          pipelines:
+          - name: citrus-rind
+            unpaused: true
+            team: main
+            config_file: github-cr-pipeline/pipeline.yml
+
   - name: build-container
     public: true
     plan:
+      - get: github-cr-pipeline
+        passed: ['set-my-pipelines']
+        trigger: false
       - get: github-cr-golang-build-container
         trigger: true
       - put: golang-build-container
@@ -51,6 +87,9 @@ jobs:
   - name: build-lambda
     public: true
     plan:
+      - get: github-cr-pipeline
+        passed: ['set-my-pipelines']
+        trigger: false
       - get: golang-build-container
         passed: ['build-container']
         trigger: true

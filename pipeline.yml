@@ -9,7 +9,7 @@ resources:
   type: concourse-pipeline
   source:
     teams:
-    - name: main                                   (1)
+    - name: main
       username: ((concourse-main-username))
       password: ((concourse-main-password))
 - name: github-cr-pipeline

@@ -87,9 +87,6 @@ jobs:
   - name: build-lambda
     public: true
     plan:
-      - get: github-cr-pipeline
-        passed: ['set-my-pipelines']
-        trigger: false
       - get: golang-build-container
         passed: ['build-container']
         trigger: true

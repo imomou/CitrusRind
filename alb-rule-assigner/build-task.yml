@@ -19,3 +19,6 @@ run:
       zip ../lambda-zip/default-${VERSION}.zip main
 outputs:
   - name: lambda-zip
+
+# fly -t prod execute --image golang-build-container \
+#   -c ./build-task.yml -j citrus-rind/build-lambda -o lambda-zip=./

@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template for macro, please refer here for source of truth
+
+Resources:
+  Vpc:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: '10.0.0.0/16'
+  Subnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: '10.0.0.0/24'
+      AvailabilityZone: !Select ['0', !GetAZs '']
+  Subnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: '10.0.1.0/24'
+      AvailabilityZone: !Select ['1', !GetAZs '']
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+  AttachGateway:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  HttpGateway:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Subnets:
+        - !Ref Subnet1
+        - !Ref Subnet2
+  HttpListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      LoadBalancerArn: !Ref HttpGateway
+      Port: '80'
+      Protocol: HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Host: "#{host}"
+            Path: "/#{path}"
+            Protocol: HTTPS
+            StatusCode: HTTP_302
+            Port: 443
+  AlbTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckPath: /doesnt/matter
+      HealthCheckProtocol: HTTP
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 10
+      VpcId: !Ref Vpc
+  ListenerRule:
+    Fn::Transform:
+      Name: 'AlbPriorityAssigner'
+      Parameters:
+        target: !Ref HttpListener
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref AlbTargetGroup
+      Conditions:
+        - Field: host-header
+          Values: ['just.a.test']
+      ListenerArn: !Ref HttpListener

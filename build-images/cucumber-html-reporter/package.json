@@ -1,0 +1,12 @@
+{
+    "name": "cucumber-html-reporter",
+    "version": "0.0.1",
+    "description": "Converts Godog json output to HTML",
+    "main": "main.js",
+    "scripts": {
+      "start": "node index.js"
+    },
+    "dependencies": {
+      "cucumber-html-reporter": "^5.0.0"
+    }
+}

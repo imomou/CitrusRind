@@ -1,0 +1,279 @@
+resource_types:
+  - name: concourse-pipeline
+    type: docker-image
+    source:
+      repository: concourse/concourse-pipeline-resource
+
+aws-config: &aws-config
+  access_key_id: ((aws-key-id))
+  secret_access_key: ((aws-key-secret))
+
+alb-priotiy-assigner-bucket-config: &alb-priotiy-assigner-bucket-config
+  << : *aws-config
+  regexp: alb-priority-assigner/default-(.*).zip
+  initial_path: alb-priority-assigner/default-0.0.0.zip
+
+test-bucket: &test-bucket
+  bucket: ((default-cicd-bucket))
+  region_name: eu-west-1
+
+resources:
+  - name: citrus-rind-pipeline
+    type: concourse-pipeline
+    source:
+      teams:
+      - name: main
+        username: ((concourse-main-username))
+        password: ((concourse-main-password))
+  - name: github-cr-pipeline
+    type: git
+    source:
+      uri: https://github.com/Bit-Clouded/CitrusRind.git
+      paths: ['pipeline.yml']
+  
+  - name: github-cr-golang-build-container
+    type: git
+    source:
+      uri: https://github.com/Bit-Clouded/CitrusRind.git
+      paths: ['build-images/golang/*']
+  - name: github-cr-alb-rule-assigner
+    type: git
+    source:
+      uri: https://github.com/Bit-Clouded/CitrusRind.git
+      paths: ['alb-rule-assigner/*', 'alb-rule-assigner/**/*']
+  
+  - name: golang-build-container
+    type: docker-image
+    source:
+      repository: 380048663093.dkr.ecr.eu-west-1.amazonaws.com/golang-build-container
+      << : *aws-config
+  
+  - name: test-bucket
+    type: s3
+    source:
+      bucket: ((default-cicd-bucket))
+      region_name: eu-west-1
+      << : *alb-priotiy-assigner-bucket-config
+  
+  - name: alb-priority-assigner-ver
+    type: semver
+    source:
+      bucket: ((default-cicd-bucket))
+      << : *test-bucket
+      << : *aws-config
+      key: alb-priority-assigner/semver-1.0
+      initial_version: 1.0.0
+  
+  - name: release-bucket-ap-northeast-1
+    type: s3
+    source:
+      bucket: glenfiddich-ap-northeast-1
+      region_name: ap-northeast-1
+      << : *alb-priotiy-assigner-bucket-config
+  - name: release-bucket-ap-northeast-2
+    type: s3
+    source:
+      bucket: glenfiddich-ap-northeast-2
+      region_name: ap-northeast-2
+      << : *alb-priotiy-assigner-bucket-config
+  - name: release-bucket-ap-south-1
+    type: s3
+    source:
+      bucket: glenfiddich-ap-south-1
+      region_name: ap-south-1
+      << : *alb-priotiy-assigner-bucket-config
+  - name: release-bucket-ap-southeast-1
+    type: s3
+    source:
+      bucket: glenfiddich-ap-southeast-1
+      region_name: ap-southeast-1
+      << : *alb-priotiy-assigner-bucket-config
+  - name: release-bucket-ap-southeast-2
+    type: s3
+    source:
+      bucket: glenfiddich-ap-southeast-2
+      region_name: ap-southeast-2
+      << : *alb-priotiy-assigner-bucket-config
+  - name: release-bucket-ca-central-1
+    type: s3
+    source:
+      bucket: glenfiddich-ca-central-1
+      region_name: ca-central-1
+      << : *alb-priotiy-assigner-bucket-config
+  - name: release-bucket-eu-central-1
+    type: s3
+    source:
+      bucket: glenfiddich-eu-central-1
+      region_name: eu-central-1
+      << : *alb-priotiy-assigner-bucket-config
+  - name: release-bucket-eu-west-1
+    type: s3
+    source:
+      bucket: glenfiddich-eu-west-1
+      region_name: eu-west-1
+      << : *alb-priotiy-assigner-bucket-config
+  - name: release-bucket-eu-west-2
+    type: s3
+    source:
+      bucket: glenfiddich-eu-west-2
+      region_name: eu-west-2
+      << : *alb-priotiy-assigner-bucket-config
+  - name: release-bucket-sa-east-1
+    type: s3
+    source:
+      bucket: glenfiddich-sa-east-1
+      region_name: sa-east-1
+      << : *alb-priotiy-assigner-bucket-config
+  - name: release-bucket-us-east-1
+    type: s3
+    source:
+      bucket: glenfiddich-us-east-1
+      region_name: us-east-1
+      << : *alb-priotiy-assigner-bucket-config
+  - name: release-bucket-us-east-2
+    type: s3
+    source:
+      bucket: glenfiddich-us-east-2
+      region_name: us-east-2
+      << : *alb-priotiy-assigner-bucket-config
+  - name: release-bucket-us-west-1
+    type: s3
+    source:
+      bucket: glenfiddich-us-west-1
+      region_name: us-west-1
+      << : *alb-priotiy-assigner-bucket-config
+  - name: release-bucket-us-west-2
+    type: s3
+    source:
+      bucket: glenfiddich-us-west-2
+      region_name: us-west-2
+      << : *alb-priotiy-assigner-bucket-config
+
+
+jobs:
+  - name: set-my-pipelines
+    plan:
+      - get: github-cr-pipeline
+        trigger: true
+      - put: citrus-rind-pipeline
+        params:
+          pipelines:
+          - name: citrus-rind
+            unpaused: true
+            team: main
+            config_file: github-cr-pipeline/pipeline.yml
+
+  - name: build-container
+    public: true
+    plan:
+      - get: github-cr-pipeline
+        passed: ['set-my-pipelines']
+        trigger: false
+      - get: github-cr-golang-build-container
+        trigger: true
+      - put: golang-build-container
+        params:
+          build: github-cr-golang-build-container/build-images/golang
+  - name: build-lambda
+    public: true
+    plan:
+      - get: golang-build-container
+        passed: ['build-container']
+        trigger: true
+      - get: github-cr-alb-rule-assigner
+        trigger: true
+      - get: alb-priority-assigner-ver
+        params: {pre: rc}
+      - task: build
+        image: golang-build-container
+        file: github-cr-alb-rule-assigner/alb-rule-assigner/build-task.yml
+      - put: test-bucket
+        params:
+          file: lambda-zip/default-*.zip
+          acl: public-read
+      - put: alb-priority-assigner-ver
+        params:
+          file: alb-priority-assigner-ver/number
+  - name: release-promote
+    public: true
+    plan:
+      - get: golang-build-container
+        passed: ['build-container']
+        trigger: false
+      - get: alb-priority-assigner-ver
+        params: {bump: final}
+        passed: ['build-lambda']
+        trigger: false
+      - get: test-bucket
+        params:
+          file: lambda-zip/default-*.zip
+        passed: ['build-lambda']
+        trigger: false
+      - task: rename
+        image: golang-build-container
+        config:
+          platform: linux
+          inputs:
+            - name: alb-priority-assigner-ver
+            - name: test-bucket
+          run:
+            path: /bin/sh
+            args:
+              - -c
+              - |
+                mv ./test-bucket/default-*.zip ./lambda-zip/default-$(cat ./alb-priority-assigner-ver/number).zip
+          outputs:
+            - name: lambda-zip
+      - put: test-bucket
+        params:
+          file: lambda-zip/default-*.zip
+          acl: public-read
+      - in_parallel:
+        - put: release-bucket-ap-northeast-1
+          params:
+            file: lambda-zip/default-*.zip
+        - put: release-bucket-ap-northeast-2
+          params:
+            file: lambda-zip/default-*.zip
+        - put: release-bucket-ap-south-1
+          params:
+            file: lambda-zip/default-*.zip
+        - put: release-bucket-ap-southeast-1
+          params:
+            file: lambda-zip/default-*.zip
+        - put: release-bucket-ap-southeast-2
+          params:
+            file: lambda-zip/default-*.zip
+        - put: release-bucket-ca-central-1
+          params:
+            file: lambda-zip/default-*.zip
+        - put: release-bucket-eu-central-1
+          params:
+            file: lambda-zip/default-*.zip
+        - put: release-bucket-eu-west-1
+          params:
+            file: lambda-zip/default-*.zip
+        - put: release-bucket-eu-west-2
+          params:
+            file: lambda-zip/default-*.zip
+        - put: release-bucket-sa-east-1
+          params:
+            file: lambda-zip/default-*.zip
+        - put: release-bucket-us-east-1
+          params:
+            file: lambda-zip/default-*.zip
+        - put: release-bucket-us-east-2
+          params:
+            file: lambda-zip/default-*.zip
+        - put: release-bucket-us-west-1
+          params:
+            file: lambda-zip/default-*.zip
+        - put: release-bucket-us-west-2
+          params:
+            file: lambda-zip/default-*.zip
+      - put: alb-priority-assigner-ver
+        params:
+          file: alb-priority-assigner-ver/number
+      - put: alb-priority-assigner-ver
+        params:
+          bump: patch

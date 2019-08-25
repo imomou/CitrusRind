@@ -1,0 +1,24 @@
+---
+platform: linux
+inputs:
+  - name: github-cr-alb-rule-assigner
+    path: /
+  - name: alb-priority-assigner-ver
+run:
+  path: /bin/sh
+  dir: alb-rule-assigner
+  args:
+    - -c
+    - |
+      set -e
+      go get -d ./...
+      go test -tags netgo
+      #https://github.com/serverless/serverless/issues/4710
+      go build -ldflags '-d -s -w' -a -tags netgo -installsuffix netgo -o main .
+      VERSION=$(cat ../alb-priority-assigner-ver/number)
+      zip ../lambda-zip/default-${VERSION}.zip main
+outputs:
+  - name: lambda-zip
+
+# fly -t prod execute --image golang-build-container \
+#   -c ./build-task.yml -j citrus-rind/build-lambda -o lambda-zip=./
